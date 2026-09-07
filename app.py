@@ -61,13 +61,16 @@ if st.button("🚀 Generate Study Pack", type="primary"):
         progress.progress(20)
 
         # Stage 2: Notes
-        with stage_box:
-            st.markdown('<div class="stage"><div class="stage-title">Stage 2 — Generating study notes</div></div>', unsafe_allow_html=True)
-            with st.spinner("AI is creating structured notes..."):
-                stage2 = generate_stage(
-                    build_stage_2_prompt(subject, topic, level, stage1)
-                )
-            st.write(stage2)
+       with st.spinner("AI is creating structured notes..."):
+    stage2_prompt = build_stage_2_prompt(
+        subject, topic, level, stage1
+    )
+
+    st.write("Stage 2 prompt characters:", len(stage2_prompt))
+
+    stage2 = generate_stage(stage2_prompt)
+
+st.write(stage2)
         progress.progress(40)
 
         # Stage 3: Key questions
