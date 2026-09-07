@@ -4,7 +4,7 @@ import streamlit as st
 from google import genai
 from google.genai.errors import APIError
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.6-flash"
 
 def get_api_key():
     # Local development: .streamlit/secrets.toml
