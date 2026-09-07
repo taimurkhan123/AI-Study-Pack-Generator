@@ -4,6 +4,7 @@ import streamlit as st
 from google import genai
 from google.genai.errors import APIError
 
+# Use the current supported Gemini 3.6 Flash model
 MODEL = "gemini-3.6-flash"
 
 def get_api_key():
@@ -40,9 +41,9 @@ def generate_stage(prompt: str, retries: int = 3, delay: float = 2.0) -> str:
             return text
 
         except APIError as e:
-            # If Google server is overloaded (503) or busy, wait and try again
+            # If Google server is overloaded (503) or rate limited (429), pause and retry
             if getattr(e, "code", None) in [503, 429] or "high demand" in str(e).lower():
                 if attempt < retries - 1:
-                    time.sleep(delay * (2 ** attempt))  # Wait 2 sec, then 4 sec, then 8 sec
+                    time.sleep(delay * (2 ** attempt))  # Pause 2s, 4s, 8s...
                     continue
             raise e
