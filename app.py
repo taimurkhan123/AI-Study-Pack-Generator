@@ -32,6 +32,10 @@ st.markdown("""
 st.title("📚 AI Study Pack Generator")
 st.caption("A practical prompt-chaining project using Python, Streamlit, and Gemini 3.6 Flash.")
 
+# Initialize session state storage for stages
+if "study_pack_data" not in st.session_state:
+    st.session_state.study_pack_data = {}
+
 with st.sidebar:
     st.header("Study Settings")
     subject = st.text_input("Subject", "Computer Networks")
@@ -46,70 +50,62 @@ if st.button("🚀 Generate Study Pack", type="primary"):
         st.warning("Please enter both a subject and a topic.")
         st.stop()
 
+    st.session_state.study_pack_data = {}
     progress = st.progress(0)
-    stage_box = st.container()
 
     try:
         # Stage 1: Understand and plan
-        with stage_box:
-            st.markdown('<div class="stage"><div class="stage-title">Stage 1 — Understanding the topic</div></div>', unsafe_allow_html=True)
-            with st.spinner("AI is identifying the important concepts..."):
-                stage1 = generate_stage(
-                    build_stage_1_prompt(subject, topic, level)
-                )
-            st.write(stage1)
+        with st.status("Stage 1: Identifying key concepts...", expanded=True) as status:
+            stage1 = generate_stage(build_stage_1_prompt(subject, topic, level))
+            st.session_state.study_pack_data["stage1"] = stage1
+            status.update(label="Stage 1 Complete!", state="complete", expanded=False)
         progress.progress(20)
 
-     # Stage 2: Notes
-with stage_box:
-    st.markdown(
-        '<div class="stage"><div class="stage-title">'
-        'Stage 2 — Generating study notes'
-        '</div></div>',
-        unsafe_allow_html=True
-    )
-
-    with st.spinner("AI is creating structured notes..."):
-        stage2 = generate_stage(
-            build_stage_2_prompt(subject, topic, level, stage1)
-        )
-
-    st.write(stage2)
-
-progress.progress(40)
+        # Stage 2: Notes
+        with st.status("Stage 2: Creating study notes...", expanded=True) as status:
+            stage2 = generate_stage(build_stage_2_prompt(subject, topic, level, st.session_state.study_pack_data["stage1"]))
+            st.session_state.study_pack_data["stage2"] = stage2
+            status.update(label="Stage 2 Complete!", state="complete", expanded=False)
+        progress.progress(40)
 
         # Stage 3: Key questions
-        with stage_box:
-            st.markdown('<div class="stage"><div class="stage-title">Stage 3 — Generating important questions</div></div>', unsafe_allow_html=True)
-            with st.spinner("AI is preparing exam-focused questions..."):
-                stage3 = generate_stage(
-                    build_stage_3_prompt(subject, topic, stage2)
-                )
-            st.write(stage3)
+        with st.status("Stage 3: Preparing exam-focused questions...", expanded=True) as status:
+            stage3 = generate_stage(build_stage_3_prompt(subject, topic, st.session_state.study_pack_data["stage2"]))
+            st.session_state.study_pack_data["stage3"] = stage3
+            status.update(label="Stage 3 Complete!", state="complete", expanded=False)
         progress.progress(60)
 
         # Stage 4: Quiz
-        with stage_box:
-            st.markdown('<div class="stage"><div class="stage-title">Stage 4 — Creating the quiz</div></div>', unsafe_allow_html=True)
-            with st.spinner("AI is creating the quiz..."):
-                stage4 = generate_stage(
-                    build_stage_4_prompt(subject, topic, stage2, question_count)
-                )
-            st.write(stage4)
+        with st.status("Stage 4: Creating quiz...", expanded=True) as status:
+            stage4 = generate_stage(build_stage_4_prompt(subject, topic, st.session_state.study_pack_data["stage2"], question_count))
+            st.session_state.study_pack_data["stage4"] = stage4
+            status.update(label="Stage 4 Complete!", state="complete", expanded=False)
         progress.progress(80)
 
         # Stage 5: Final study plan
-        with stage_box:
-            st.markdown('<div class="stage"><div class="stage-title">Stage 5 — Building the final study pack</div></div>', unsafe_allow_html=True)
-            with st.spinner("AI is combining the results into the final study pack..."):
-                stage5 = generate_stage(
-                    build_stage_5_prompt(subject, topic, level, stage1, stage2, stage3, stage4)
+        with st.status("Stage 5: Compiling final study pack...", expanded=True) as status:
+            stage5 = generate_stage(
+                build_stage_5_prompt(
+                    subject,
+                    topic,
+                    level,
+                    st.session_state.study_pack_data["stage1"],
+                    st.session_state.study_pack_data["stage2"],
+                    st.session_state.study_pack_data["stage3"],
+                    st.session_state.study_pack_data["stage4"]
                 )
-            st.write(stage5)
+            )
+            st.session_state.study_pack_data["stage5"] = stage5
+            status.update(label="Stage 5 Complete!", state="complete", expanded=False)
         progress.progress(100)
 
         st.success("✅ Study pack completed!")
 
     except Exception as e:
-        st.error("The AI request failed. Check your API key and terminal/deployment logs.")
+        st.error("The AI request failed. Check your API key and Cloud logs.")
         st.exception(e)
+
+# Display results safely from session state
+if "stage5" in st.session_state.study_pack_data:
+    st.divider()
+    st.markdown(st.session_state.study_pack_data["stage5"])
