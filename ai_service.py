@@ -1,17 +1,16 @@
 import os
+import re
 import time
 import streamlit as st
 from google import genai
-from google.genai.errors import APIError, ServerError
+from google.genai.errors import APIError, ClientError, ServerError
 
-MODEL = "gemini-3.6-flash"
+# Updated model to gemini-3.8-flash
+MODEL = "gemini-3.8-flash"
 
 def get_api_key():
-    # Local development: .streamlit/secrets.toml
     if "GEMINI_API_KEY" in st.secrets:
         return st.secrets["GEMINI_API_KEY"]
-
-    # Optional fallback for environment variables.
     return os.getenv("GEMINI_API_KEY")
 
 def get_client():
@@ -23,37 +22,43 @@ def get_client():
         )
     return genai.Client(api_key=api_key)
 
-def generate_stage(prompt: str, retries: int = 5, delay: float = 3.0) -> str:
-    """Generates content with robust retries for temporary server overloads."""
+def extract_retry_delay(error_msg: str) -> float:
+    """Extracts suggested retry delay from 429 error messages."""
+    match = re.search(r"retry in (\d+\.?\d*)s", error_msg, re.IGNORECASE)
+    if match:
+        return float(match.group(1)) + 1.0
+    return 10.0
+
+def generate_stage(prompt: str, retries: int = 3) -> str:
     client = get_client()
 
     for attempt in range(retries):
         try:
-            response = client.models.generate_content(
+            # Using client.interactions.create with gemini-3.8-flash
+            interaction = client.interactions.create(
                 model=MODEL,
-                contents=prompt,
+                input=prompt
             )
 
-            text = getattr(response, "text", None)
+            # Retrieve text output from interaction.outputs
+            if hasattr(interaction, "outputs") and interaction.outputs:
+                text = getattr(interaction.outputs[-1], "text", None)
+            else:
+                text = getattr(interaction, "output_text", None)
+
             if not text:
                 raise RuntimeError("Gemini returned an empty response.")
             return text
 
-        except (APIError, ServerError, Exception) as e:
-            error_str = str(e).lower()
-            is_overloaded = (
-                "503" in error_str 
-                or "unavailable" in error_str 
-                or "high demand" in error_str
-                or "429" in error_str
-                or "resource_exhausted" in error_str
-            )
+        except (APIError, ClientError, ServerError) as e:
+            error_str = str(e)
 
-            # If Google servers are busy, wait longer and retry
-            if is_overloaded and attempt < retries - 1:
-                wait_time = delay * (2 ** attempt)  # Pauses: 3s, 6s, 12s, 24s...
-                time.sleep(wait_time)
-                continue
-            
-            # If it's a different error or out of retries, raise it
+            # Handle rate limits (429) & server overloads (503) automatically
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "503" in error_str:
+                if attempt < retries - 1:
+                    wait_time = extract_retry_delay(error_str)
+                    st.toast(f"⏳ Rate limit reached. Retrying in {int(wait_time)} seconds...", icon="⏱️")
+                    time.sleep(wait_time)
+                    continue
+
             raise e
