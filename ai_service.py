@@ -2,9 +2,8 @@ import os
 import time
 import streamlit as st
 from google import genai
-from google.genai.errors import APIError
+from google.genai.errors import APIError, ServerError
 
-# Use the current supported Gemini 3.6 Flash model
 MODEL = "gemini-3.6-flash"
 
 def get_api_key():
@@ -24,8 +23,8 @@ def get_client():
         )
     return genai.Client(api_key=api_key)
 
-def generate_stage(prompt: str, retries: int = 3, delay: float = 2.0) -> str:
-    """Generates content and automatically retries if Google servers are busy."""
+def generate_stage(prompt: str, retries: int = 5, delay: float = 3.0) -> str:
+    """Generates content with robust retries for temporary server overloads."""
     client = get_client()
 
     for attempt in range(retries):
@@ -40,10 +39,21 @@ def generate_stage(prompt: str, retries: int = 3, delay: float = 2.0) -> str:
                 raise RuntimeError("Gemini returned an empty response.")
             return text
 
-        except APIError as e:
-            # If Google server is overloaded (503) or rate limited (429), pause and retry
-            if getattr(e, "code", None) in [503, 429] or "high demand" in str(e).lower():
-                if attempt < retries - 1:
-                    time.sleep(delay * (2 ** attempt))  # Pause 2s, 4s, 8s...
-                    continue
+        except (APIError, ServerError, Exception) as e:
+            error_str = str(e).lower()
+            is_overloaded = (
+                "503" in error_str 
+                or "unavailable" in error_str 
+                or "high demand" in error_str
+                or "429" in error_str
+                or "resource_exhausted" in error_str
+            )
+
+            # If Google servers are busy, wait longer and retry
+            if is_overloaded and attempt < retries - 1:
+                wait_time = delay * (2 ** attempt)  # Pauses: 3s, 6s, 12s, 24s...
+                time.sleep(wait_time)
+                continue
+            
+            # If it's a different error or out of retries, raise it
             raise e
